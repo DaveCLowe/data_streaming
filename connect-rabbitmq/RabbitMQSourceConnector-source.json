@@ -1,0 +1,16 @@
+{
+    "name": "RabbitMQSourceConnector",
+    "config": {
+        "connector.class": "io.confluent.connect.rabbitmq.RabbitMQSourceConnector",
+        "tasks.max": "2",
+        "kafka.topic": "test_topic",
+        "rabbitmq.queue": "test_queue",
+        "rabbitmq.username": "guest",
+        "rabbitmq.password": "guest",
+        "rabbitmq.host": "rabbitmq",
+        "rabbitmq.virtual.host": "/",
+        "confluent.topic.bootstrap.servers": "kafka:9092",
+        "value.converter": "org.apache.kafka.connect.converters.ByteArrayConverter",
+        "key.converter": "org.apache.kafka.connect.storage.StringConverter"
+    }
+}
