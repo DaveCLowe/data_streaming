@@ -90,6 +90,7 @@ services:
     container_name: impala
     depends_on:
       - kudu-tserver
+      - ldap
     ports:
       - 21000:21000
       - 21050:21050
@@ -148,6 +149,7 @@ services:
     depends_on:
       - zookeeper
       - kafka
+      - ldap
       - schemaregistry
     environment:
       CONNECT_BOOTSTRAP_SERVERS: "kafka:9092"
@@ -201,6 +203,23 @@ services:
       - ksqldb-server
     entrypoint: /bin/sh
     tty: true
+
+  ldap:
+    networks:
+      - streaming
+    image: osixia/openldap:1.3.0
+    hostname: ldap
+    container_name: ldap
+    environment:
+      LDAP_ORGANISATION: "kudu"
+      LDAP_DOMAIN: "example.com"
+      LDAP_TLS_VERIFY_CLIENT: "try"
+    ports:
+      - "3890:389"
+      - "10636:636"
+    volumes:
+      - ./ldap/custom:/container/service/slapd/assets/config/bootstrap/ldif/custom
+    command: "--copy-service --loglevel debug"
 
 networks:
   streaming:
