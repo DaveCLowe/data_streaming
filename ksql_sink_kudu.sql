@@ -11,5 +11,8 @@ CREATE SINK CONNECTOR SINK_IMPALA WITH (
     'key.converter'       = 'org.apache.kafka.connect.storage.StringConverter',
     'transforms'          = 'dropSysCols',
     'transforms.dropSysCols.type' = 'org.apache.kafka.connect.transforms.ReplaceField$Value',
-    'transforms.dropSysCols.blacklist' = 'ROWKEY,ROWTIME'
+    'transforms.dropSysCols.blacklist' = 'ROWKEY,ROWTIME',
+    'confluent.topic.bootstrap.servers' = 'kafka:9092',
+    'impala.ldap.password'= 'secret',
+    'impala.ldap.user'= 'kudu'
   );
