@@ -20,14 +20,14 @@ docker exec -it ksqldb-cli ksql http://ksqldb-server:8088
 
 ksql> PRINT 'test_topic' FROM BEGINNING;
 
-ksql> CREATE STREAM rabbit (transaction VARCHAR,
+ksql> CREATE STREAM rabbit2 (transaction VARCHAR,
                       amount VARCHAR,
                       timestamp VARCHAR)
   WITH (KAFKA_TOPIC='test_topic', VALUE_FORMAT='JSON');
 
 
 SET 'auto.offset.reset' = 'earliest';
-SELECT transaction, amount, timestamp FROM rabbit EMIT CHANGES;
+SELECT transaction, amount, timestamp FROM rabbit2 EMIT CHANGES;
 
 CREATE STREAM TRANSACTIONS WITH (VALUE_FORMAT='AVRO') AS
   SELECT TRANSACTION AS TX_TYPE,
@@ -39,20 +39,3 @@ CREATE STREAM TRANSACTIONS WITH (VALUE_FORMAT='AVRO') AS
     EMIT CHANGES;
 
 SELECT TX_TYPE, CURRENCY, TX_AMOUNT, TX_TIMESTAMP FROM TRANSACTIONS EMIT CHANGES;
-
-CREATE SINK CONNECTOR SINK_IMPALA WITH (
-    'connector.class'     = 'io.confluent.connect.kudu.KuduSinkConnector',
-    'tasks.max'= '1',
-    'impala.server'= 'kudu-impala',
-    'impala.port'= '21050',
-    'kudu.database'= 'default',
-    'auto.create'= 'true',
-    'pk.mode'='record_value',
-    'pk.fields'='id',
-    'topics'              = 'TRANSACTIONS',
-    'key.converter'       = 'org.apache.kafka.connect.storage.StringConverter',
-    'transforms'          = 'dropSysCols',
-    'transforms.dropSysCols.type' = 'org.apache.kafka.connect.transforms.ReplaceField$Value',
-    'transforms.dropSysCols.blacklist' = 'ROWKEY,ROWTIME'
-  );
-
