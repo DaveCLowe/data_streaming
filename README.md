@@ -69,6 +69,8 @@ Create a rabbit queue named test_queue:
 
 	curl --user guest:guest -X PUT -H 'content-type: application/json' --data-binary '{"vhost":"/","name":"test_queue","durable":"true","auto_delete":"false","arguments":{"x-queue-type":"classic"}}' http://localhost:15672/api/queues/%2F/test_queue
 
+What's that whack %2F mean? The default virtual host is called "/", this will need to be URL encoded as "%2f".
+
 Confirm the queue exists. The below will output the queues present:
 
     curl -s --user guest:guest -X GET -H 'content-type: application/json' http://localhost:15672/api/queues/%2F/ | jq '.[].name '
