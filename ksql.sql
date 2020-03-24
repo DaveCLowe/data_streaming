@@ -20,7 +20,7 @@ docker exec -it ksqldb-cli ksql http://ksqldb-server:8088
 
 ksql> PRINT 'test_topic' FROM BEGINNING;
 
-ksql> CREATE STREAM rabbit2 (transaction VARCHAR,
+ksql> CREATE STREAM from_rabbit (transaction VARCHAR,
                       amount VARCHAR,
                       timestamp VARCHAR)
   WITH (KAFKA_TOPIC='test_topic', VALUE_FORMAT='JSON');

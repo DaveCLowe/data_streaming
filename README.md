@@ -6,7 +6,7 @@ Docker will spin up:
 - Rabbit AMQP broker
 - Kafka Broker
 - Kudu Masters (x3)
-- Kudu tablet servers. Default of 1, but can scale +- with docker-compose up kudu-tserver --scale 3
+- Kudu tablet servers. Default of 1, but can scale +- with docker-compose up --scale kudu-tserver=3
 - Impala Server (impalad, statestore, catalogd, hive metastore)
 - NiFi Server
 - Kafka KSQLdb
@@ -71,6 +71,10 @@ Confirm the queue exists. The below will output the queues present:
     curl -s --user guest:guest -X GET -H 'content-type: application/json' http://localhost:15672/api/queues/%2F/ | jq '.[].name '
 
 Publish a message to Rabbit:
+
+TO TEST: 
+{\"timestamp\": \"'$(date)'\", \"process_pid\": \"123\", \"process_md5\": \"76fd387fd63d0d3dcd2b691151b70fed\", \"process_name\": \"malware.exe\" }
+
 
 {\"transaction\": \"PAYMENT\", \"amount\": \"$125.0\", \"timestamp\": \"'$(date)'\" }
 
@@ -157,8 +161,7 @@ A stream essentially associates a schema with an underlying Kafka topic.
 
     ksql> CREATE STREAM from_rabbit (transaction VARCHAR,
                       amount VARCHAR,
-                      timestamp VARCHAR)
-  WITH (KAFKA_TOPIC='test_topic', VALUE_FORMAT='JSON');
+                      timestamp VARCHAR) WITH (KAFKA_TOPIC='test_topic', VALUE_FORMAT='JSON');
 
 Reset your offset to earliest, and read from this new stream using SQL:
 
@@ -169,20 +172,18 @@ Now, let's create a transformed stream to a new Kafka topic which we'll later pu
 
 Develop/test the SQL:
 
-    ksql> SELECT TRANSACTION AS TX_TYPE,
+    SELECT TRANSACTION AS TX_TYPE,
          SUBSTRING(AMOUNT,1,1) AS CURRENCY,
          CAST(SUBSTRING(AMOUNT,2,LEN(AMOUNT)-1) AS DECIMAL(9,2)) AS TX_AMOUNT,
          TIMESTAMP AS TX_TIMESTAMP
-    FROM from_rabbit
-   WHERE TIMESTAMP IS NOT NULL
-    EMIT CHANGES;
+    FROM from_rabbit WHERE TIMESTAMP IS NOT NULL EMIT CHANGES;
 
 Turn this into a stream/topic as avro:
 
-    ksql> CREATE STREAM TRANSACTIONS WITH (VALUE_FORMAT='AVRO') AS SELECT TRANSACTION AS TX_TYPE, SUBSTRING(AMOUNT,1,1) AS CURRENCY,
+    CREATE STREAM TRANSACTIONS WITH (VALUE_FORMAT='AVRO') AS SELECT TRANSACTION AS TX_TYPE, SUBSTRING(AMOUNT,1,1) AS CURRENCY,
          CAST(SUBSTRING(AMOUNT,2,LEN(AMOUNT)-1) AS DECIMAL(9,2)) AS TX_AMOUNT,
          TIMESTAMP AS TX_TIMESTAMP
-    FROM rabbit2 WHERE TIMESTAMP IS NOT NULL
+    FROM from_rabbit WHERE TIMESTAMP IS NOT NULL
     EMIT CHANGES;
 
 Now read the new topic:
