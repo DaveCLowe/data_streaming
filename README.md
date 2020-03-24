@@ -158,43 +158,43 @@ Create a stream (https://docs.ksqldb.io/en/latest/concepts/collections/streams/)
 
 A stream essentially associates a schema with an underlying Kafka topic.
 
-    ksql> CREATE STREAM from_rabbit (transaction VARCHAR,
-                      amount VARCHAR,
-                      timestamp VARCHAR) WITH (KAFKA_TOPIC='test_topic', VALUE_FORMAT='JSON');
+    CREATE STREAM from_rabbit (timestamp VARCHAR,
+                      process_pid VARCHAR,
+                      process_md5 VARCHAR, process_name VARCHAR) WITH (KAFKA_TOPIC='test_topic', VALUE_FORMAT='JSON');
 
 Reset your offset to earliest, and read from this new stream using SQL:
 
-    ksql> SET 'auto.offset.reset' = 'earliest';
-    ksql> SELECT transaction, amount, timestamp FROM from_rabbit EMIT CHANGES;
+    SET 'auto.offset.reset' = 'earliest';
+    SELECT timestamp, process_pid, process_md5, process_name  FROM from_rabbit EMIT CHANGES;
 
 Now, let's create a transformed stream to a new Kafka topic which we'll later publish to Kudu.
 
 Develop/test the SQL:
 
-    SELECT TRANSACTION AS TX_TYPE,
-         SUBSTRING(AMOUNT,1,1) AS CURRENCY,
-         CAST(SUBSTRING(AMOUNT,2,LEN(AMOUNT)-1) AS DECIMAL(9,2)) AS TX_AMOUNT,
-         TIMESTAMP AS TX_TIMESTAMP
+    SELECT PROCESS_MD5 AS MD5,
+         SPLIT(PROCESS_NAME,'.')[1] AS FILE_EXTENSION,
+         PROCESS_NAME, CAST(PROCESS_PID AS INT) AS PID,
+         TIMESTAMP AS TS_TIMESTAMP
     FROM from_rabbit WHERE TIMESTAMP IS NOT NULL EMIT CHANGES;
 
 Turn this into a stream/topic as avro:
 
-    CREATE STREAM TRANSACTIONS WITH (VALUE_FORMAT='AVRO') AS SELECT TRANSACTION AS TX_TYPE, SUBSTRING(AMOUNT,1,1) AS CURRENCY,
-         CAST(SUBSTRING(AMOUNT,2,LEN(AMOUNT)-1) AS DECIMAL(9,2)) AS TX_AMOUNT,
-         TIMESTAMP AS TX_TIMESTAMP
-    FROM from_rabbit WHERE TIMESTAMP IS NOT NULL
-    EMIT CHANGES;
+    CREATE STREAM PROCESS_EVENTS WITH (VALUE_FORMAT='AVRO') AS SELECT PROCESS_MD5 AS MD5,
+         SPLIT(PROCESS_NAME,'.')[1] AS FILE_EXTENSION,
+         PROCESS_NAME, CAST(PROCESS_PID AS INT) AS PID,
+         TIMESTAMP AS TS_TIMESTAMP
+    FROM from_rabbit WHERE TIMESTAMP IS NOT NULL EMIT CHANGES;
 
 Now read the new topic:
 
-    SELECT TX_TYPE, CURRENCY, TX_AMOUNT, TX_TIMESTAMP FROM TRANSACTIONS EMIT CHANGES;
+    SELECT * FROM PROCESS_EVENTS EMIT CHANGES;
 
 ## Checkpoint 2
-We are now using KSQL on Kafka to read JSON from one topic (test_topic), transform the data, and write messages back to a new topic (TRANSACTIONS) in avro format.
+We are now using KSQL on Kafka to read JSON from one topic (test_topic), transform the data, and write messages back to a new topic (PROCESS_EVENTS) in avro format.
 
 ## Kafka Connect - Kudu Sink
 
-We now want every record published to the TRANSACTIONS topic to be stored in Kudu.
+We now want every record published to the PROCESS_EVENTS topic to be stored in Kudu.
 
 TO do this, we use a Kafka Connect Sink (not a source) for Kudu over Impala. This appears to be a licenced Confluent product but free to use for a short period of time (30 days?).
 
@@ -211,8 +211,8 @@ From your ksql cli shell, create the Kudu sink:
     'kudu.tablet.replicas'='1',
     'auto.create'= 'true',
     'pk.mode'='record_value',
-    'pk.fields'='TX_TYPE,TX_AMOUNT,TX_TIMESTAMP',
-    'topics'              = 'TRANSACTIONS',
+    'pk.fields'='TS_TIMESTAMP,MD5,PROCESS_NAME',
+    'topics'              = 'PROCESS_EVENTS',
     'key.converter'       = 'org.apache.kafka.connect.storage.StringConverter',
     'transforms'          = 'dropSysCols',
     'transforms.dropSysCols.type' = 'org.apache.kafka.connect.transforms.ReplaceField$Value',
@@ -226,6 +226,6 @@ Publish messages to Rabbit, and tail logs on the Impala container.
 
 You can also run an impala-shell:
 
-    ➜ docker-compose exec impala impala-shell -i localhost:21000 -l -u cn=admin,dc=example,dc=org --ldap_password_cmd="echo -n admin" --auth_creds_ok_in_clear << EOF use default; show tables; select * from TRANSACTIONS; EOF
+    ➜ docker-compose exec impala impala-shell -i localhost:21000 -l -u cn=admin,dc=example,dc=org --ldap_password_cmd="echo -n admin" --auth_creds_ok_in_clear << EOF use default; show tables; select * from PROCESS_EVENTS; EOF
 
 
