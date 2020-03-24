@@ -18,6 +18,9 @@ Docker will spin up:
 
 The Docker containers shall form a virtual bridged network named: "streaming".
 
+![Diagram](./assets/img/docker_ds.png)
+
+
 The data streaming message flow is as follows:
 1. Publish JSON message to Rabbit queue
 2. Kafka Connect consumes the message from Rabbit and publishes to a Kafka topic
