@@ -45,7 +45,7 @@ This is just a POC with security being an afterthought/lacking. There is no cryp
 - Docker
 - docker-compose
 - curl
-- jq
+- jq (Optional, for pretty printing out json payloads)
 
 Ideally, you will also have VS Code and WSL. 
 
