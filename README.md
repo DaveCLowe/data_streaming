@@ -91,6 +91,10 @@ Check out the Rabbit mgmt UI. Experiment to create familiarity.
 - http://localhost:15672/#/queues/%2F/test_queue
 
 ### Configure Kafka Connect
+
+![Diagram](./assets/img/kafka_connect-1.png)
+
+
 Create the Kafka topic by hand to ensure the number of replicas equals 1 as we only have a single broker. **If you're on Windows, replace docker-compose with docker-compose.exe.**
 
     docker-compose exec kafka kafka-topics --create --topic _confluent-command  --partitions 1 --replication-factor 1 --if-not-exists --zookeeper zookeeper:2181
