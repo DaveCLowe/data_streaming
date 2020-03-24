@@ -75,10 +75,9 @@ Publish a message to Rabbit:
 TO TEST: 
 {\"timestamp\": \"'$(date)'\", \"process_pid\": \"123\", \"process_md5\": \"76fd387fd63d0d3dcd2b691151b70fed\", \"process_name\": \"malware.exe\" }
 
+    echo '{"vhost":"/","name":"amq.default","properties":{"delivery_mode":1,"headers":{}},"routing_key":"test_queue","delivery_mode":"1","payload":"{\"timestamp\": \"'$(date)'\", \"process_pid\": \"123\", \"process_md5\": \"76fd387fd63d0d3dcd2b691151b70fed\", \"process_name\": \"malware.exe\" }","headers":{},"props":{},"payload_encoding":"string"}' | curl --user guest:guest -X POST -H 'content-type: application/json' --data-binary @- 
+http://localhost:15672/api/exchanges/%2F/amq.default/publish
 
-{\"transaction\": \"PAYMENT\", \"amount\": \"$125.0\", \"timestamp\": \"'$(date)'\" }
-
-    echo '{"vhost":"/","name":"amq.default","properties":{"delivery_mode":1,"headers":{}},"routing_key":"test_queue","delivery_mode":"1","payload":"{\"transaction\": \"PAYMENT\", \"amount\": \"$125.0\", \"timestamp\": \"'$(date)'\" }","headers":{},"props":{},"payload_encoding":"string"}' | curl --user guest:guest -X POST -H 'content-type: application/json' --data-binary @- http://localhost:15672/api/exchanges/%2F/amq.default/publish
 
 Consume the message to ensure it worked:
 
@@ -139,7 +138,7 @@ Send a few more messages to Rabbit and consume the Kafka topic "test_topic" to s
 
 You should see something like:
 
-    {"transaction": "PAYMENT", "amount": "$125.0", "timestamp": "Tue Mar 24 10:40:55 AEDT 2020" }
+    {"timestamp": "Tue Mar 24 15:17:19 AEDT 2020", "process_pid": "123", "process_md5": "76fd387fd63d0d3dcd2b691151b70fed", "process_name": "malware.exe" }
 
 ## KSQLdb
 
