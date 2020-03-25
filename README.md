@@ -231,6 +231,8 @@ Publish messages to Rabbit, and tail logs on the Impala container.
 
 You can also run an impala-shell:
 
-    ➜ docker-compose exec kudu-impala impala-shell -i localhost:21000 -l -u cn=admin,dc=example,dc=org --ldap_password_cmd="echo -n admin" --auth_creds_ok_in_clear << EOF use default; show tables; select * from process_events; EOF
+    ➜ docker-compose exec kudu-impala impala-shell -i localhost:21000 -l -u cn=admin,dc=example,dc=org --ldap_password_cmd="echo -n admin" --auth_creds_ok_in_clear 
+
+    # Execute SQL. eg use default; select * from process_events
 
 
