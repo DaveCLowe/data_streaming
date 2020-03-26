@@ -1,0 +1,20 @@
+{
+    "computer_name": "JASON-WIN81-VM",
+    "mod_md5": "3D136E8D4C0407D9C40FD8BDD649B587",
+    "mod_path": "c:\\windows\\system32\\ntdll.dll",
+    "ts_modload": 1447697423,
+    "command_line": "\"C:\\Windows\\system32\\SearchProtocolHost.exe\" Global\\UsGthrFltPipeMssGthrPipe253",
+    "proc_md5": "D6021013D7C4E248AEB8BED12D3DCC88",
+    "ts_procstart_parent": 1447440685,
+    "parent_md5": "79227C1E2225DE455F365B607A6D46FB",
+    "parent_path": "c:\\windows\\system32\\searchindexer.exe",
+    "parent_process_guid": "00000001-0000-0af4-01d1-1e444bf4c3dd",
+    "proc_path": "c:\\windows\\system32\\searchprotocolhost.exe",
+    "proc_pid": 1972,
+    "process_guid": "00000001-0000-07b4-01d1-209a100bc217",
+    "ts_procstart": 1447697423,
+    "username": "SYSTEM",
+    "ip_address": "127.0.0.1",
+    "agent_id": "209a100bc217",
+    "caption": "Microsoft Windows 10 Pro"
+}

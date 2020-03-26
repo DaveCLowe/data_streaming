@@ -1,0 +1,1 @@
+{ "cb_server": "cbserver", "computer_name": "JASON-WIN81-VM", "event_type": "modload", "md5": "3D136E8D4C0407D9C40FD8BDD649B587", "path": "c:\\windows\\system32\\ntdll.dll", "pid": 1972, "process_guid": "00000001-0000-07b4-01d1-209a100bc217", "sensor_id": 1, "timestamp": 1447697423, "type": "ingress.event.moduleload"}

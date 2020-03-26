@@ -77,14 +77,21 @@ Confirm the queue exists. The below will output the queues present:
 
 Publish a message to Rabbit:
 
-    echo '{"vhost":"/","name":"amq.default","properties":{"delivery_mode":1,"headers":{}},"routing_key":"test_queue","delivery_mode":"1","payload":"{\"timestamp\": \"'$(date)'\", \"process_pid\": \"123\", \"process_md5\": \"76fd387fd63d0d3dcd2b691151b70fed\", \"process_name\": \"malware.exe\", \"hostname\": \"WIN7-DESKTOP\" }","headers":{},"props":{},"payload_encoding":"string"}' | curl --user guest:guest -X POST -H 'content-type: application/json' --data-binary @- http://localhost:15672/api/exchanges/%2F/amq.default/publish
+    echo '{"vhost":"/","name":"amq.default","properties":{"delivery_mode":1,"headers":{}},"routing_key":"test_queue","delivery_mode":"1","payload":"{ \"publish_timestamp\": \"'$(date +%s)'\",\"cb_server\": \"cbserver\", \"command_line\": \"Global\\\\\\\\UsGthrFltPipeMssGthrPipe253\", \"computer_name\": \"JASON-WIN81-VM\", \"event_type\": \"proc\", \"expect_followon_w_md5\": false, \"md5\": \"D6021013D7C4E248AEB8BED12D3DCC88\", \"parent_create_time\": 1447440685, \"parent_md5\": \"79227C1E2225DE455F365B607A6D46FB\", \"parent_path\": \"c:\\\\\\\\windows\\\\\\\\system32\\\\\\\\searchindexer.exe\", \"parent_process_guid\": \"00000001-0000-0af4-01d1-1e444bf4c3dd\", \"path\": \"c:\\\\\\\\windows\\\\\\\\system32\\\\\\\\searchprotocolhost.exe\", \"pid\": 1972, \"process_guid\": \"00000001-0000-07b4-01d1-209a100bc217\", \"sensor_id\": 1, \"timestamp\": 1447697423, \"type\": \"ingress.event.procstart\", \"username\": \"SYSTEM\"}","headers":{},"props":{},"payload_encoding":"string"}' | curl --user guest:guest -X POST -H 'content-type: application/json' --data-binary @- http://localhost:15672/api/exchanges/%2F/amq.default/publish
 
 
 Consume the message to ensure it worked:
 
     curl --silent --user guest:guest -X POST -H 'content-type: application/json' --data-binary '{"ackmode":"ack_requeue_true","encoding":"auto","count":"10"}' http://localhost:15672/api/queues/%2F/test_queue/get | jq '.[].payload|fromjson'
 
+![Diagram](./assets/img/consume_amqp.png)
+
+
 Check out the Rabbit mgmt UI. Experiment to create familiarity.
+
+To create further process creation events, use the shell script:
+
+    ./publish_amqp.sh
 
 (guest/guest)
 
@@ -143,7 +150,9 @@ Send a few more messages to Rabbit and consume the Kafka topic "test_topic" to s
 
 You should see something like:
 
-    {"timestamp": "Tue Mar 24 15:17:19 AEDT 2020", "process_pid": "123", "process_md5": "76fd387fd63d0d3dcd2b691151b70fed", "process_name": "malware.exe" }
+    { "timestamp": "1585189850","cb_server": "cbserver", "command_line": "Global\\UsGthrFltPipeMssGthrPipe253", "computer_name": "JASON-WIN81-VM", "event_type": "proc", "expect_followon_w_md5": false, "md5": "D6021013D7C4E248AEB8BED12D3DCC88", "parent_create_time": 1447440685, "parent_md5": "79227C1E2225DE455F365B607A6D46FB", "parent_path": "c:\\windows\\system32\\searchindexer.exe", "parent_process_guid": "00000001-0000-0af4-01d1-1e444bf4c3dd", "path": "c:\\windows\\system32\\searchprotocolhost.exe", "pid": 1972, "process_guid": "00000001-0000-07b4-01d1-209a100bc217", "sensor_id": 1, "timestamp": 1447697423, "type": "ingress.event.procstart", "username": "SYSTEM"}
+
+
 
 ## KSQLdb
 
@@ -163,14 +172,13 @@ Create a stream (https://docs.ksqldb.io/en/latest/concepts/collections/streams/)
 
 A stream essentially associates a schema with an underlying Kafka topic.
 
-    CREATE STREAM from_rabbit (timestamp VARCHAR,
-                      process_pid VARCHAR,
-                      process_md5 VARCHAR, process_name VARCHAR) WITH (KAFKA_TOPIC='test_topic', VALUE_FORMAT='JSON');
+    CREATE STREAM STR_PROCSTART_BASE (cb_server VARCHAR, command_line VARCHAR, computer_name VARCHAR, event_type VARCHAR, expect_followon_w_md5 VARCHAR, md5 VARCHAR, parent_create_time INT, parent_md5 VARCHAR, parent_path VARCHAR, parent_process_guid VARCHAR, path VARCHAR, pid INT, process_guid VARCHAR, sensor_id INT, timestamp INT, type VARCHAR, username VARCHAR) WITH (kafka_topic='test_topic', value_format='json') ; 
+
 
 Reset your offset to earliest, and read from this new stream using SQL:
 
     SET 'auto.offset.reset' = 'earliest';
-    SELECT timestamp, process_pid, process_md5, process_name  FROM from_rabbit EMIT CHANGES;
+    SELECT *  FROM STR_PROCSTART_BASE EMIT CHANGES;
 
 Now, let's create a transformed stream to a new Kafka topic which we'll later publish to Kudu.
 
@@ -179,16 +187,16 @@ Develop/test the SQL:
     SELECT PROCESS_MD5 AS MD5,
          SPLIT(PROCESS_NAME,'.')[1] AS FILE_EXTENSION,
          PROCESS_NAME, CAST(PROCESS_PID AS INT) AS PID,
-         TIMESTAMP AS TS_TIMESTAMP
-    FROM from_rabbit WHERE TIMESTAMP IS NOT NULL EMIT CHANGES;
+         TIMESTAMP AS TS_TIMESTAMP, HOSTNAME
+    FROM from_rabbit WHERE TIMESTAMP IS NOT NULL AND HOSTNAME IS NOT NULL EMIT CHANGES;
 
 Turn this into a stream/topic as avro:
 
     CREATE STREAM PROCESS_EVENTS WITH (VALUE_FORMAT='AVRO') AS SELECT PROCESS_MD5 AS MD5,
          SPLIT(PROCESS_NAME,'.')[1] AS FILE_EXTENSION,
          PROCESS_NAME, CAST(PROCESS_PID AS INT) AS PID,
-         TIMESTAMP AS TS_TIMESTAMP
-    FROM from_rabbit WHERE TIMESTAMP IS NOT NULL EMIT CHANGES;
+         TIMESTAMP AS TS_TIMESTAMP, HOSTNAME
+    FROM from_rabbit WHERE TIMESTAMP IS NOT NULL AND HOSTNAME IS NOT NULL EMIT CHANGES;
 
 Now read the new topic:
 
@@ -236,3 +244,85 @@ You can also run an impala-shell:
     # Execute SQL. eg use default; select * from process_events
 
 
+
+
+## Advanced streaming
+
+More streams, ksql tables and joins.
+
+Firstly, lets create a computer_name keyed stream from the process creation events stream. We need a ROWKEY to not be NULL, which is the default, so we can join across topics/streams/tables etc.
+
+    CREATE STREAM STR_PROCSTART_BASE (publish_timestamp VARCHAR, cb_server VARCHAR, command_line VARCHAR, computer_name VARCHAR, event_type VARCHAR, expect_followon_w_md5 VARCHAR, md5 VARCHAR, parent_create_time INT, parent_md5 VARCHAR, parent_path VARCHAR, parent_process_guid VARCHAR, path VARCHAR, pid INT, process_guid VARCHAR, sensor_id INT, timestamp INT, type VARCHAR, username VARCHAR) WITH (kafka_topic='test_topic', value_format='json') ; 
+
+Key it by computer name:
+
+    CREATE STREAM STR_PROCSTART_BY_COMPUTER_NAME AS SELECT * FROM STR_PROCSTART_BASE WHERE COMPUTER_NAME is not null PARTITION BY COMPUTER_NAME;
+
+
+### Create Module Load Events
+
+#### Kafka Topic
+
+Now, lets create some module load events via Kafka:
+
+    docker-compose exec kafka kafka-topics --create --topic moduleload_raw  --partitions 1 --replication-factor 1 --if-not-exists --zookeeper zookeeper:2181
+
+#### Create the KSQL stream
+
+    CREATE STREAM STR_MODULELOAD_BASE (cb_server VARCHAR, computer_name VARCHAR, event_type VARCHAR, md5 VARCHAR, path VARCHAR, pid INT, process_guid VARCHAR, sensor_id INT, timestamp INT, type VARCHAR ) WITH (kafka_topic='moduleload_raw', value_format='json') ;  
+
+#### Create a computer name keyed stream
+
+    CREATE STREAM STR_MODULELOAD_BY_COMPUTER_NAME AS SELECT * FROM STR_MODULELOAD_BASE WHERE COMPUTER_NAME is not null PARTITION BY COMPUTER_NAME;
+
+
+#### Send some records
+
+And some process start events:
+
+    cat module_load.json | docker-compose exec -T kafka kafka-console-producer --broker-list kafka:9092 --topic moduleload_raw
+
+### Create OS Info Events
+
+#### Create the topic
+
+    docker-compose exec kafka kafka-topics --create --topic osinfo_raw  --partitions 1 --replication-factor 1 --if-not-exists --zookeeper zookeeper:2181
+
+#### Create KSQL stream
+
+    CREATE STREAM STR_OSINFO_BASE (cb_server VARCHAR, computer_name VARCHAR, event_type VARCHAR, ip_address VARCHAR, agent_id VARCHAR, timestamp VARCHAR, type VARCHAR, OSArchitecture VARCHAR, OSLanguage INT, Manufacturer VARCHAR, Caption VARCHAR, InstallDate VARCHAR, CurrentTimeZone INT, LastBootUpTime VARCHAR, LocalDateTime VARCHAR, OSType INT, Version VARCHAR, BootDevice VARCHAR, BuildNumber INT, CodeSet INT, CountryCode INT) WITH (kafka_topic='osinfo_raw', value_format='json');
+
+#### Keyed stream (rowkey = computer_name)
+
+    CREATE STREAM STR_OSINFO_BY_COMPUTER_NAME AS SELECT * FROM STR_OSINFO_BASE WHERE COMPUTER_NAME is not null PARTITION BY COMPUTER_NAME;
+
+### Create the KSQL table
+
+Create a table of the computer name keyed stream. This way, when we join to this table on the computer name, only the latest record is returned to produce the latest OS info.
+
+    CREATE TABLE TBL_OSINFO_BY_COMPUTER_NAME (cb_server VARCHAR, computer_name VARCHAR, event_type VARCHAR, ip_address VARCHAR, agent_id VARCHAR, timestamp VARCHAR, type VARCHAR, OSArchitecture VARCHAR, OSLanguage INT, Manufacturer VARCHAR, Caption VARCHAR, InstallDate VARCHAR, CurrentTimeZone INT, LastBootUpTime VARCHAR, LocalDateTime VARCHAR, OSType INT, Version VARCHAR, BootDevice VARCHAR, BuildNumber INT, CodeSet INT, CountryCode INT) WITH (kafka_topic='STR_OSINFO_BY_COMPUTER_NAME',key='computer_name', value_format='json');
+
+
+#### Pump across a record
+
+    cat host_info.json | docker-compose exec -T kafka kafka-console-producer --broker-list kafka:9092 --topic osinfo_raw
+
+View the table and confirm the ROWKEY has been set to the computer name:
+
+    ksql> select ROWKEY, COMPUTER_NAME from TBL_OSINFO_BY_COMPUTER_NAME emit changes;
+
+
+## Create enriched procstart stream
+
+    CREATE STREAM STR_PROCSTART_ENRICHED AS SELECT p.COMMAND_LINE, p.COMPUTER_NAME, p.MD5 as proc_md5, p.PATH as proc_path, p.PID, p.PROCESS_GUID, p.TIMESTAMP as ts_procstart, p.USERNAME, p.PARENT_PATH, h.IP_ADDRESS, h.CAPTION, h.VERSION FROM STR_PROCSTART_BY_COMPUTER_NAME p JOIN TBL_OSINFO_BY_COMPUTER_NAME h ON p.COMPUTER_NAME = h.COMPUTER_NAME EMIT CHANGES;
+
+
+## Create enriched modload stream
+
+```
+CREATE STREAM STR_MODLOAD_ENRICHED AS
+  SELECT e.COMMAND_LINE, e.p_COMPUTER_NAME, e.proc_md5, e.proc_path, e.PID, e.PROCESS_GUID, e.ts_procstart, e.USERNAME, e.PARENT_PATH, e.IP_ADDRESS, e.CAPTION, e.VERSION, m.MD5 as mod_md5, m.PATH as mod_path
+  FROM STR_PROCSTART_ENRICHED e
+  INNER JOIN STR_MODULELOAD_BY_COMPUTER_NAME m WITHIN 2 HOURS
+  ON e.p_computer_name = m.computer_name where e.process_guid = m.process_guid
+  EMIT CHANGES;
