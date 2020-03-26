@@ -180,30 +180,9 @@ Reset your offset to earliest, and read from this new stream using SQL:
     SET 'auto.offset.reset' = 'earliest';
     SELECT *  FROM STR_PROCSTART_BASE EMIT CHANGES;
 
-Now, let's create a transformed stream to a new Kafka topic which we'll later publish to Kudu.
-
-Develop/test the SQL:
-
-    SELECT PROCESS_MD5 AS MD5,
-         SPLIT(PROCESS_NAME,'.')[1] AS FILE_EXTENSION,
-         PROCESS_NAME, CAST(PROCESS_PID AS INT) AS PID,
-         TIMESTAMP AS TS_TIMESTAMP, HOSTNAME
-    FROM STR_PROCSTART_BASE WHERE TIMESTAMP IS NOT NULL AND HOSTNAME IS NOT NULL EMIT CHANGES;
-
-Turn this into a stream/topic as avro:
-
-    CREATE STREAM PROCESS_EVENTS WITH (VALUE_FORMAT='AVRO') AS SELECT PROCESS_MD5 AS MD5,
-         SPLIT(PROCESS_NAME,'.')[1] AS FILE_EXTENSION,
-         PROCESS_NAME, CAST(PROCESS_PID AS INT) AS PID,
-         TIMESTAMP AS TS_TIMESTAMP, HOSTNAME
-    FROM STR_PROCSTART_BASE WHERE TIMESTAMP IS NOT NULL AND HOSTNAME IS NOT NULL EMIT CHANGES;
-
-Now read the new topic:
-
-    SELECT * FROM PROCESS_EVENTS EMIT CHANGES;
 
 ## Checkpoint 2
-We are now using KSQL on Kafka to read JSON from one topic (test_topic), transform the data, and write messages back to a new topic (PROCESS_EVENTS) in avro format.
+
 
 ## Kafka Connect - Kudu Sink
 
