@@ -206,6 +206,8 @@ Now, lets create some module load events via Kafka:
 
 #### Create the KSQL stream
 
+    docker-compose exec ksqldb-cli ksql http://ksqldb-server:8088
+
     CREATE STREAM STR_MODULELOAD_BASE (cb_server VARCHAR, computer_name VARCHAR, event_type VARCHAR, md5 VARCHAR, path VARCHAR, pid INT, process_guid VARCHAR, sensor_id INT, timestamp INT, type VARCHAR ) WITH (kafka_topic='moduleload_raw', value_format='json') ;  
 
 #### Create a computer name keyed stream
@@ -215,7 +217,7 @@ Now, lets create some module load events via Kafka:
 
 #### Send some records
 
-And some process start events:
+Back in a shell (not ksql!) send some module load events:
 
     cat module_load.json | docker-compose exec -T kafka kafka-console-producer --broker-list kafka:9092 --topic moduleload_raw
 
@@ -226,6 +228,8 @@ And some process start events:
     docker-compose exec kafka kafka-topics --create --topic osinfo_raw  --partitions 1 --replication-factor 1 --if-not-exists --zookeeper zookeeper:2181
 
 #### Create KSQL stream
+
+    docker-compose exec ksqldb-cli ksql http://ksqldb-server:8088
 
     CREATE STREAM STR_OSINFO_BASE (cb_server VARCHAR, computer_name VARCHAR, event_type VARCHAR, ip_address VARCHAR, agent_id VARCHAR, timestamp VARCHAR, type VARCHAR, OSArchitecture VARCHAR, OSLanguage INT, Manufacturer VARCHAR, Caption VARCHAR, InstallDate VARCHAR, CurrentTimeZone INT, LastBootUpTime VARCHAR, LocalDateTime VARCHAR, OSType INT, Version VARCHAR, BootDevice VARCHAR, BuildNumber INT, CodeSet INT, CountryCode INT) WITH (kafka_topic='osinfo_raw', value_format='json');
 
@@ -246,6 +250,8 @@ Create a table of the computer name keyed stream. This way, when we join to this
 
 View the table and confirm the ROWKEY has been set to the computer name:
 
+    ksql> SET 'auto.offset.reset' = 'earliest';
+
     ksql> select ROWKEY, COMPUTER_NAME from TBL_OSINFO_BY_COMPUTER_NAME emit changes;
 
 
@@ -253,31 +259,50 @@ View the table and confirm the ROWKEY has been set to the computer name:
 
     CREATE STREAM STR_PROCSTART_ENRICHED AS SELECT p.COMMAND_LINE, p.COMPUTER_NAME, p.MD5 as proc_md5, p.PATH as proc_path, p.PID, p.PROCESS_GUID, p.TIMESTAMP as ts_procstart, p.USERNAME, p.PARENT_PATH, h.IP_ADDRESS, h.CAPTION, h.VERSION FROM STR_PROCSTART_BY_COMPUTER_NAME p JOIN TBL_OSINFO_BY_COMPUTER_NAME h ON p.COMPUTER_NAME = h.COMPUTER_NAME EMIT CHANGES;
 
+Check out the results of the enriched process stream (from os info events).
+
+    select * from STR_PROCSTART_ENRICHED;
+
+You will need to reset the offset to earliest, and/or send new data. 
+
+![Diagram](./assets/img/process_and_osinfo.png)
 
 ## Create enriched modload stream
 
 ```
-CREATE STREAM STR_MODLOAD_ENRICHED AS
+CREATE STREAM STR_MODLOAD_ENRICHED WITH (VALUE_FORMAT='AVRO') AS
   SELECT e.COMMAND_LINE, e.p_COMPUTER_NAME, e.proc_md5, e.proc_path, e.PID, e.PROCESS_GUID, e.ts_procstart, e.USERNAME, e.PARENT_PATH, e.IP_ADDRESS, e.CAPTION, e.VERSION, m.MD5 as mod_md5, m.PATH as mod_path
   FROM STR_PROCSTART_ENRICHED e
   INNER JOIN STR_MODULELOAD_BY_COMPUTER_NAME m WITHIN 2 HOURS
   ON e.p_computer_name = m.computer_name where e.process_guid = m.process_guid
   EMIT CHANGES;
+```
 
+You now have a stream of module load events which will join onto the process creation event where the process guids and computer_names match within 2 hours. The process creation event is enriched with osinfo data to return IP address, OS version details.
 
+Check it out:
+
+![Diagram](./assets/img/process_and_osinfo_and_moduleload.png)
 
 
 ## Kafka Connect - Kudu Sink
 
-We now want every record published to the PROCESS_EVENTS topic to be stored in Kudu.
+We now want every record published to the STR_MODLOAD_ENRICHED topic to be stored in Kudu.
 
 TO do this, we use a Kafka Connect Sink (not a source) for Kudu over Impala. This appears to be a licenced Confluent product but free to use for a short period of time (30 days?).
 
 The Kudu sink requires LDAP authentication, hence the bundling of OpenLDAP within this solution.
 
-From your ksql cli shell, create the Kudu sink:
+Check to ensure impala is running:
 
-    CREATE SINK CONNECTOR SINK_IMPALA WITH (
+    docker ps -a | grep impala
+    85af6621322c        apache/kudu:impala-latest               "/impala-entrypoint.…"   15 hours ago        Up 31 seconds             0.0.0.0:21000->21000/tcp, 0.0.0.0:21050->21050/tcp, 0.0.0.0:25000->25000/tcp, 0.0.0.0:25010->25010/tcp, 0.0.0.0:25020->25020/tcp   impala
+
+From your ksql cli shell, create the Kudu sink. Note, table schema is BS - pkey fields aren't throught through, this is just a demo:
+
+    docker-compose exec ksqldb-cli ksql http://ksqldb-server:8088
+
+    ksql> CREATE SINK CONNECTOR SINK_IMPALA WITH (
     'connector.class'     = 'io.confluent.connect.kudu.KuduSinkConnector',
     'tasks.max'= '1',
     'impala.server'= 'impala',
@@ -286,8 +311,8 @@ From your ksql cli shell, create the Kudu sink:
     'kudu.tablet.replicas'='1',
     'auto.create'= 'true',
     'pk.mode'='record_value',
-    'pk.fields'='TS_TIMESTAMP,MD5,PROCESS_NAME',
-    'topics'              = 'PROCESS_EVENTS',
+    'pk.fields'='TS_PROCSTART,MOD_MD5,E_PROCESS_GUID,PROC_MD5,P_COMPUTER_NAME',
+    'topics'              = 'STR_MODLOAD_ENRICHED',
     'key.converter'       = 'org.apache.kafka.connect.storage.StringConverter',
     'transforms'          = 'dropSysCols',
     'transforms.dropSysCols.type' = 'org.apache.kafka.connect.transforms.ReplaceField$Value',
@@ -296,12 +321,32 @@ From your ksql cli shell, create the Kudu sink:
     'impala.ldap.password'='admin',
     'impala.ldap.user'= 'cn=admin,dc=example,dc=org'  );
 
-Publish messages to Rabbit, and tail logs on the Impala container.
 
-You can also run an impala-shell:
+Exit KSQL and query Kudu tables via the impala-shell:
 
-    docker-compose exec impala impala-shell -i localhost:21000 -l -u cn=admin,dc=example,dc=org --ldap_password_cmd="echo -n admin" --auth_creds_ok_in_clear 
+    docker-compose exec kudu-impala impala-shell -i localhost:21000 -l -u cn=admin,dc=example,dc=org --ldap_password_cmd="echo -n admin" --auth_creds_ok_in_clear 
+    
+```
+[localhost:21000] default> select * from str_modload_enrichedb limit 1;
+Query: select * from str_modload_enrichedb limit 1
+Query submitted at: 2020-03-25 16:05:53 (Coordinator: http://85af6621322c:25000)
+Query progress can be monitored at: http://85af6621322c:25000/query_plan?query_id=d5485248cf9f2d9b:9528169b00000000
++--------------------------------------+--------------+-----------------+----------------------------------+----------------------------------+-------+------------------------------------------------+-------------------------------------------+-------------------------------------+-----------------------------------+--------------+----------+--------------+--------------------------+      
+| e_process_guid                       | ts_procstart | p_computer_name | mod_md5                          | proc_md5                         | e_pid | proc_path
+   | parent_path                               | command_line                        | mod_path                          | version      | username | ip_address   | caption                  |      
++--------------------------------------+--------------+-----------------+----------------------------------+----------------------------------+-------+------------------------------------------------+-------------------------------------------+-------------------------------------+-----------------------------------+--------------+----------+--------------+--------------------------+      
+| 00000001-0000-07b4-01d1-209a100bc217 | 1447697423   | JASON-WIN81-VM  | 3D136E8D4C0407D9C40FD8BDD649B587 | D6021013D7C4E248AEB8BED12D3DCC88 | 1972  | c:\windows\system32\searchprotocolhost.exe  
+   | c:\windows\system32\searchindexer.exe     | Global\UsGthrFltPipeMssGthrPipe253  | c:\windows\system32\ntdll.dll     | 10.0.18363   | SYSTEM   | 127.0.0.1    | Microsoft Windows 10 Pro |      
++--------------------------------------+--------------+-----------------+----------------------------------+----------------------------------+-------+------------------------------------------------+-------------------------------------------+-------------------------------------+-----------------------------------+--------------+----------+--------------+--------------------------+      
+Fetched 1 row(s) in 0.24s
+[localhost:21000] default> show tables;^C
+[localhost:21000] default> Goodbye cn=admin,dc=example,dc=org
+```
 
-    # Execute SQL. eg use default; select * from process_events
+All done? Stop the containers if you want to start them back up later:
 
+    docker-compose stop
 
+Or, remove it all with a:
+
+    docker-compose down
