@@ -172,7 +172,7 @@ Create a stream (https://docs.ksqldb.io/en/latest/concepts/collections/streams/)
 
 A stream essentially associates a schema with an underlying Kafka topic.
 
-    CREATE STREAM STR_PROCSTART_BASE (cb_server VARCHAR, command_line VARCHAR, computer_name VARCHAR, event_type VARCHAR, expect_followon_w_md5 VARCHAR, md5 VARCHAR, parent_create_time INT, parent_md5 VARCHAR, parent_path VARCHAR, parent_process_guid VARCHAR, path VARCHAR, pid INT, process_guid VARCHAR, sensor_id INT, timestamp INT, type VARCHAR, username VARCHAR) WITH (kafka_topic='test_topic', value_format='json') ; 
+    CREATE STREAM STR_PROCSTART_BASE (publish_timestamp VARCHAR, cb_server VARCHAR, command_line VARCHAR, computer_name VARCHAR, event_type VARCHAR, expect_followon_w_md5 VARCHAR, md5 VARCHAR, parent_create_time INT, parent_md5 VARCHAR, parent_path VARCHAR, parent_process_guid VARCHAR, path VARCHAR, pid INT, process_guid VARCHAR, sensor_id INT, timestamp INT, type VARCHAR, username VARCHAR) WITH (kafka_topic='test_topic', value_format='json') ; 
 
 Reset your offset to earliest, and read from this new stream using SQL:
 
@@ -184,14 +184,17 @@ Reset your offset to earliest, and read from this new stream using SQL:
 
 More streams, ksql tables and joins.
 
-Firstly, lets create a computer_name keyed stream from the process creation events stream. We need a ROWKEY to not be NULL, which is the default, so we can join across topics/streams/tables etc.
-
-    CREATE STREAM STR_PROCSTART_BASE (publish_timestamp VARCHAR, cb_server VARCHAR, command_line VARCHAR, computer_name VARCHAR, event_type VARCHAR, expect_followon_w_md5 VARCHAR, md5 VARCHAR, parent_create_time INT, parent_md5 VARCHAR, parent_path VARCHAR, parent_process_guid VARCHAR, path VARCHAR, pid INT, process_guid VARCHAR, sensor_id INT, timestamp INT, type VARCHAR, username VARCHAR) WITH (kafka_topic='test_topic', value_format='json') ; 
+Firstly, lets create a computer_name keyed stream from the process creation events base stream. We need a ROWKEY to not be NULL, which is the default, so we can join across topics/streams/tables etc.
 
 Key it by computer name:
 
     CREATE STREAM STR_PROCSTART_BY_COMPUTER_NAME AS SELECT * FROM STR_PROCSTART_BASE WHERE COMPUTER_NAME is not null PARTITION BY COMPUTER_NAME;
 
+Experiment with SQL statements against the stream - and then exit ksql.
+
+You can run a bunch of transforming SQL commands on this stream and write it out to another stream. You can also create Kafka Connect sinks for the streams to push the records to an external system such as Splunk, HDFS and Kudu.
+
+We will create a few more streams for different events - join them together, and then output the results to Kudu.
 
 ### Create Module Load Events
 
