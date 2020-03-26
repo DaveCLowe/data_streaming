@@ -174,54 +174,10 @@ A stream essentially associates a schema with an underlying Kafka topic.
 
     CREATE STREAM STR_PROCSTART_BASE (cb_server VARCHAR, command_line VARCHAR, computer_name VARCHAR, event_type VARCHAR, expect_followon_w_md5 VARCHAR, md5 VARCHAR, parent_create_time INT, parent_md5 VARCHAR, parent_path VARCHAR, parent_process_guid VARCHAR, path VARCHAR, pid INT, process_guid VARCHAR, sensor_id INT, timestamp INT, type VARCHAR, username VARCHAR) WITH (kafka_topic='test_topic', value_format='json') ; 
 
-
 Reset your offset to earliest, and read from this new stream using SQL:
 
     SET 'auto.offset.reset' = 'earliest';
     SELECT *  FROM STR_PROCSTART_BASE EMIT CHANGES;
-
-
-## Checkpoint 2
-
-
-## Kafka Connect - Kudu Sink
-
-We now want every record published to the PROCESS_EVENTS topic to be stored in Kudu.
-
-TO do this, we use a Kafka Connect Sink (not a source) for Kudu over Impala. This appears to be a licenced Confluent product but free to use for a short period of time (30 days?).
-
-The Kudu sink requires LDAP authentication, hence the bundling of OpenLDAP within this solution.
-
-From your ksql cli shell, create the Kudu sink:
-
-    CREATE SINK CONNECTOR SINK_IMPALA WITH (
-    'connector.class'     = 'io.confluent.connect.kudu.KuduSinkConnector',
-    'tasks.max'= '1',
-    'impala.server'= 'impala',
-    'impala.port'= '21050',
-    'kudu.database'= 'default',
-    'kudu.tablet.replicas'='1',
-    'auto.create'= 'true',
-    'pk.mode'='record_value',
-    'pk.fields'='TS_TIMESTAMP,MD5,PROCESS_NAME',
-    'topics'              = 'PROCESS_EVENTS',
-    'key.converter'       = 'org.apache.kafka.connect.storage.StringConverter',
-    'transforms'          = 'dropSysCols',
-    'transforms.dropSysCols.type' = 'org.apache.kafka.connect.transforms.ReplaceField$Value',
-    'transforms.dropSysCols.blacklist' = 'ROWKEY,ROWTIME',
-    'confluent.topic.bootstrap.servers' = 'kafka:9092',
-    'impala.ldap.password'='admin',
-    'impala.ldap.user'= 'cn=admin,dc=example,dc=org'  );
-
-Publish messages to Rabbit, and tail logs on the Impala container.
-
-You can also run an impala-shell:
-
-    ➜ docker-compose exec impala impala-shell -i localhost:21000 -l -u cn=admin,dc=example,dc=org --ldap_password_cmd="echo -n admin" --auth_creds_ok_in_clear 
-
-    # Execute SQL. eg use default; select * from process_events
-
-
 
 
 ## Advanced streaming
@@ -304,3 +260,45 @@ CREATE STREAM STR_MODLOAD_ENRICHED AS
   INNER JOIN STR_MODULELOAD_BY_COMPUTER_NAME m WITHIN 2 HOURS
   ON e.p_computer_name = m.computer_name where e.process_guid = m.process_guid
   EMIT CHANGES;
+
+
+
+
+## Kafka Connect - Kudu Sink
+
+We now want every record published to the PROCESS_EVENTS topic to be stored in Kudu.
+
+TO do this, we use a Kafka Connect Sink (not a source) for Kudu over Impala. This appears to be a licenced Confluent product but free to use for a short period of time (30 days?).
+
+The Kudu sink requires LDAP authentication, hence the bundling of OpenLDAP within this solution.
+
+From your ksql cli shell, create the Kudu sink:
+
+    CREATE SINK CONNECTOR SINK_IMPALA WITH (
+    'connector.class'     = 'io.confluent.connect.kudu.KuduSinkConnector',
+    'tasks.max'= '1',
+    'impala.server'= 'impala',
+    'impala.port'= '21050',
+    'kudu.database'= 'default',
+    'kudu.tablet.replicas'='1',
+    'auto.create'= 'true',
+    'pk.mode'='record_value',
+    'pk.fields'='TS_TIMESTAMP,MD5,PROCESS_NAME',
+    'topics'              = 'PROCESS_EVENTS',
+    'key.converter'       = 'org.apache.kafka.connect.storage.StringConverter',
+    'transforms'          = 'dropSysCols',
+    'transforms.dropSysCols.type' = 'org.apache.kafka.connect.transforms.ReplaceField$Value',
+    'transforms.dropSysCols.blacklist' = 'ROWKEY,ROWTIME',
+    'confluent.topic.bootstrap.servers' = 'kafka:9092',
+    'impala.ldap.password'='admin',
+    'impala.ldap.user'= 'cn=admin,dc=example,dc=org'  );
+
+Publish messages to Rabbit, and tail logs on the Impala container.
+
+You can also run an impala-shell:
+
+    docker-compose exec impala impala-shell -i localhost:21000 -l -u cn=admin,dc=example,dc=org --ldap_password_cmd="echo -n admin" --auth_creds_ok_in_clear 
+
+    # Execute SQL. eg use default; select * from process_events
+
+
