@@ -211,8 +211,7 @@ From your ksql cli shell, create the Kudu sink:
     'transforms.dropSysCols.blacklist' = 'ROWKEY,ROWTIME',
     'confluent.topic.bootstrap.servers' = 'kafka:9092',
     'impala.ldap.password'='admin',
-    'impala.ldap.user'= 'cn=admin,dc=example,dc=org'
-  );
+    'impala.ldap.user'= 'cn=admin,dc=example,dc=org'  );
 
 Publish messages to Rabbit, and tail logs on the Impala container.
 
