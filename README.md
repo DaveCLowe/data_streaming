@@ -289,7 +289,7 @@ View the table and confirm the ROWKEY has been set to the computer name:
 
 Check out the results of the enriched process stream (from os info events).
 
-    select * from STR_PROCSTART_ENRICHED;
+    select * from STR_PROCSTART_ENRICHED emit changes;
 
 You will need to reset the offset to earliest, and/or send new data. 
 
@@ -355,7 +355,7 @@ Exit KSQL and query Kudu tables via the impala-shell:
     docker-compose exec kudu-impala impala-shell -i localhost:21000 -l -u cn=admin,dc=example,dc=org --ldap_password_cmd="echo -n admin" --auth_creds_ok_in_clear 
     
 ```
-[localhost:21000] default> select * from str_modload_enrichedb limit 1;
+[localhost:21000] default> select * from str_modload_enriched limit 1;
 Query: select * from str_modload_enrichedb limit 1
 Query submitted at: 2020-03-25 16:05:53 (Coordinator: http://85af6621322c:25000)
 Query progress can be monitored at: http://85af6621322c:25000/query_plan?query_id=d5485248cf9f2d9b:9528169b00000000
