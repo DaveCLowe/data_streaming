@@ -1,7 +1,31 @@
 # Data Streaming
 
-## Contents
-[TOC]
+- [Data Streaming](#data-streaming)
+  - [Introduction](#introduction)
+    - [Known gaps and limitations](#known-gaps-and-limitations)
+    - [Mapped Ports](#mapped-ports)
+  - [Prerequisites](#prerequisites)
+  - [Beginner Guide](#beginner-guide)
+    - [Start the services](#start-the-services)
+    - [Configure Rabbit](#configure-rabbit)
+    - [Configure Kafka Connect](#configure-kafka-connect)
+  - [Checkpoint 1](#checkpoint-1)
+  - [KSQLdb](#ksqldb)
+  - [Advanced streaming](#advanced-streaming)
+    - [Create Module Load Events](#create-module-load-events)
+      - [Kafka Topic](#kafka-topic)
+      - [Create the KSQL stream](#create-the-ksql-stream)
+      - [Create a computer name keyed stream](#create-a-computer-name-keyed-stream)
+      - [Send some records](#send-some-records)
+    - [Create OS Info Events](#create-os-info-events)
+      - [Create the topic](#create-the-topic)
+      - [Create KSQL stream](#create-ksql-stream)
+      - [Keyed stream (rowkey = computer_name)](#keyed-stream-rowkey--computer_name)
+    - [Create the KSQL table](#create-the-ksql-table)
+      - [Pump across a record](#pump-across-a-record)
+  - [Create enriched procstart stream](#create-enriched-procstart-stream)
+  - [Create enriched modload stream](#create-enriched-modload-stream)
+  - [Kafka Connect - Kudu Sink](#kafka-connect---kudu-sink)
 
 ## Introduction
 This project creates a collection of containers wrapped via docker-compose to generate a data streaming and transformation pipeline.
