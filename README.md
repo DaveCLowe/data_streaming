@@ -1,4 +1,8 @@
 # Data Streaming
+
+## Contents
+[TOC]
+
 ## Introduction
 This project creates a collection of containers wrapped via docker-compose to generate a data streaming and transformation pipeline.
 
